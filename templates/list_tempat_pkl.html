@@ -5,14 +5,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-
     <div class="header">
         <h1>Daftar Tempat PKL</h1>
     </div>
 
     <div class="container">
-        <a href="/" class="back-button">Kembali ke Dashboard</a>
-
         <div class="card">
             <table>
                 <tr>
@@ -41,6 +38,7 @@
                 {% endfor %}
             </table>
         </div>
+        <a href="/" class="btn-dashboard">⬅ Kembali ke Dashboard</a>
     </div>
 
 </body>

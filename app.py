@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect
 from flask_mysqldb import MySQL
+from ml_model import prediksi
 
 app = Flask(__name__)
 
@@ -10,14 +11,18 @@ app.config['MYSQL_DB'] = 'spk_pkl'
 
 mysql = MySQL(app)
 
+# ================== HOME ==================
 @app.route('/')
 def home():
     return render_template('index.html')
 
+
+# ================== TAMBAH DATA ==================
 @app.route('/tempat_pkl', methods=['GET', 'POST'])
 def tempat_pkl():
     if request.method == 'POST':
         nama_pkl = request.form['nama_pkl']
+        jurusan = request.form['jurusan']  # ✅ TAMBAHAN
         lokasi_pkl = request.form['lokasi_pkl']
         jarak = request.form['jarak']
         fasilitas = request.form['fasilitas']
@@ -25,16 +30,19 @@ def tempat_pkl():
 
         cur = mysql.connection.cursor()
         cur.execute("""
-            INSERT INTO tempat_pkl (nama_pkl, lokasi_pkl, jarak, fasilitas, reputasi)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (nama_pkl, lokasi_pkl, jarak, fasilitas, reputasi))
+            INSERT INTO tempat_pkl 
+            (nama_pkl, jurusan, lokasi_pkl, jarak, fasilitas, reputasi)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (nama_pkl, jurusan, lokasi_pkl, jarak, fasilitas, reputasi))
         mysql.connection.commit()
         cur.close()
 
-        return redirect('/tempat_pkl')
+        return redirect('/list_tempat_pkl')
 
     return render_template('tempat_pkl.html')
 
+
+# ================== LIST DATA ==================
 @app.route('/list_tempat_pkl')
 def list_tempat_pkl():
     cur = mysql.connection.cursor()
@@ -44,12 +52,15 @@ def list_tempat_pkl():
 
     return render_template('list_tempat_pkl.html', data=data)
 
+
+# ================== EDIT DATA ==================
 @app.route('/edit_tempat_pkl/<int:id>', methods=['GET', 'POST'])
 def edit_tempat_pkl(id):
     cur = mysql.connection.cursor()
 
     if request.method == 'POST':
         nama_pkl = request.form['nama_pkl']
+        jurusan = request.form['jurusan']  # ✅ TAMBAHAN
         lokasi_pkl = request.form['lokasi_pkl']
         jarak = request.form['jarak']
         fasilitas = request.form['fasilitas']
@@ -57,9 +68,9 @@ def edit_tempat_pkl(id):
 
         cur.execute("""
             UPDATE tempat_pkl
-            SET nama_pkl=%s, lokasi_pkl=%s, jarak=%s, fasilitas=%s, reputasi=%s
+            SET nama_pkl=%s, jurusan=%s, lokasi_pkl=%s, jarak=%s, fasilitas=%s, reputasi=%s
             WHERE id_pkl=%s
-        """, (nama_pkl, lokasi_pkl, jarak, fasilitas, reputasi, id))
+        """, (nama_pkl, jurusan, lokasi_pkl, jarak, fasilitas, reputasi, id))
 
         mysql.connection.commit()
         cur.close()
@@ -72,6 +83,8 @@ def edit_tempat_pkl(id):
 
     return render_template('edit_tempat_pkl.html', data=data)
 
+
+# ================== HAPUS ==================
 @app.route('/hapus_tempat_pkl/<int:id>')
 def hapus_tempat_pkl(id):
     cur = mysql.connection.cursor()
@@ -81,58 +94,34 @@ def hapus_tempat_pkl(id):
 
     return redirect('/list_tempat_pkl')
 
+
+# ================== HASIL SAW ==================
 @app.route('/hasil')
 def hasil():
     cur = mysql.connection.cursor()
-
-    cur.execute("SELECT * FROM tempat_pkl")
+    cur.execute("SELECT id_pkl, nama_pkl, jurusan, lokasi_pkl, jarak, fasilitas, reputasi FROM tempat_pkl")
     data = cur.fetchall()
 
     hasil_perhitungan = []
 
     for row in data:
-        id_pkl = row[0]
         nama_pkl = row[1]
-        lokasi = row[2]
-        jarak = row[3]
-        fasilitas = row[4]
-        reputasi = row[5]
+        lokasi = row[3]
+        jarak = row[4]
+        fasilitas = row[5]
+        reputasi = row[6]
 
-        # Konversi jarak
-        if jarak == 'Dekat':
-            nilai_jarak = 3
-        elif jarak == 'Sedang':
-            nilai_jarak = 2
-        else:
-            nilai_jarak = 1
+        # konversi nilai
+        nilai_jarak = 3 if jarak == 'Dekat' else 2 if jarak == 'Sedang' else 1
+        nilai_fasilitas = 3 if fasilitas == 'Lengkap' else 2 if fasilitas == 'Cukup' else 1
+        nilai_reputasi = 3 if reputasi == 'Sangat Baik' else 2 if reputasi == 'Baik' else 1
 
-        # Konversi fasilitas
-        if fasilitas == 'Lengkap':
-            nilai_fasilitas = 3
-        elif fasilitas == 'Cukup':
-            nilai_fasilitas = 2
-        else:
-            nilai_fasilitas = 1
-
-        # Konversi reputasi
-        if reputasi == 'Sangat Baik':
-            nilai_reputasi = 3
-        elif reputasi == 'Baik':
-            nilai_reputasi = 2
-        else:
-            nilai_reputasi = 1
-
-        # Bobot
-        bobot_jarak = 0.20
-        bobot_fasilitas = 0.30
-        bobot_reputasi = 0.50
-
-        # Perhitungan SAW
+        # SAW
         nilai_akhir = (
-            (nilai_jarak / 3) * bobot_jarak +
-            (nilai_fasilitas / 3) * bobot_fasilitas +
-            (nilai_reputasi / 3) * bobot_reputasi
-        )
+            (nilai_jarak * 0.2) +
+            (nilai_fasilitas * 0.3) +
+            (nilai_reputasi * 0.5)
+        ) / 3
 
         hasil_perhitungan.append({
             'nama_pkl': nama_pkl,
@@ -140,18 +129,12 @@ def hasil():
             'nilai': round(nilai_akhir, 3)
         })
 
-    hasil_perhitungan = sorted(
-        hasil_perhitungan,
-        key=lambda x: x['nilai'],
-        reverse=True
-    )
+    hasil_perhitungan = sorted(hasil_perhitungan, key=lambda x: x['nilai'], reverse=True)
 
     cur.close()
-
     return render_template('hasil.html', hasil=hasil_perhitungan)
 
-
-
+# ================== KRITERIA ==================
 @app.route('/kriteria')
 def kriteria():
     cur = mysql.connection.cursor()
@@ -161,6 +144,8 @@ def kriteria():
 
     return render_template('kriteria.html', kriteria=data_kriteria)
 
+
+# ================== PENILAIAN ==================
 @app.route('/penilaian')
 def penilaian():
     data_penilaian = [
@@ -176,23 +161,24 @@ def penilaian():
         {'kriteria': 'Reputasi', 'keterangan': 'Baik', 'nilai': 2},
         {'kriteria': 'Reputasi', 'keterangan': 'Cukup', 'nilai': 1},
     ]
+
+    return render_template('penilaian.html', penilaian=data_penilaian)
+
+
+# ================== EVALUASI ==================
 @app.route('/evaluasi')
 def evaluasi():
     cur = mysql.connection.cursor()
 
-    # jumlah data PKL
     cur.execute("SELECT COUNT(*) FROM tempat_pkl")
     total_pkl = cur.fetchone()[0]
 
-    # jumlah berdasarkan jarak
     cur.execute("SELECT jarak, COUNT(*) FROM tempat_pkl GROUP BY jarak")
     data_jarak = cur.fetchall()
 
-    # jumlah berdasarkan fasilitas
     cur.execute("SELECT fasilitas, COUNT(*) FROM tempat_pkl GROUP BY fasilitas")
     data_fasilitas = cur.fetchall()
 
-    # jumlah berdasarkan reputasi
     cur.execute("SELECT reputasi, COUNT(*) FROM tempat_pkl GROUP BY reputasi")
     data_reputasi = cur.fetchall()
 
@@ -206,7 +192,23 @@ def evaluasi():
         data_reputasi=data_reputasi
     )
 
-    return render_template('penilaian.html', penilaian=data_penilaian)
 
+# ================== PREDIKSI ML ==================
+@app.route('/prediksi', methods=['GET', 'POST'])
+def prediksi_pkl():
+    if request.method == 'POST':
+        jurusan = request.form['jurusan']
+        jarak = request.form['jarak']
+        fasilitas = request.form['fasilitas']
+        reputasi = request.form['reputasi']
+
+        hasil = prediksi(mysql, jurusan, jarak, fasilitas, reputasi)
+
+        return render_template('hasil_prediksi.html', hasil=hasil)
+
+    return render_template('prediksi.html')
+
+
+# ================== RUN ==================
 if __name__ == '__main__':
     app.run(debug=True)
